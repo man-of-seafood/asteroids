@@ -7,6 +7,7 @@ const DIRECTIONS = Object.freeze({
 
 const SPACE = "Space";
 const KEY_CODES = { DIRECTIONS, SPACE };
+const STARTING_ASTEROIDS = 10;
 const HEIGHT = 700;
 const WIDTH = 800;
 
@@ -14,13 +15,14 @@ class GameModel {
   constructor() {
     this.moverRegistry = {} // maps names to references to movers along with their positional info
     this.score = 0;
+    this.remainingAsteroids = STARTING_ASTEROIDS;
     this.removedIds = new Set();
   }
 
   init() {
     // sets up thing to update the mover registry on an interval
     this.spawnControlledMover();
-    this.spawnAsteroid();
+    this.spawnAsteroids(STARTING_ASTEROIDS);
     this.reRender();
     this.isAlive = true;
 
@@ -37,8 +39,13 @@ class GameModel {
 
   reAnimateWithPositionAbsolute() {
       this.recalculatePositions();
+      this.recalculateRemainingAsteroids();
       this.reRender();
       if (this.useAnimationFrame) window.requestAnimationFrame(this.reAnimateWithPositionAbsolute.bind(this))
+  }
+
+  recalculateRemainingAsteroids() {
+    this.remainingAsteroids = Object.values(this.moverRegistry).filter(m => m instanceof Asteroid).length;
   }
   reAnimateWithTransitions() {
     this.recalculatePositions();
@@ -74,9 +81,11 @@ class GameModel {
     this.moverRegistry[cMover.id] = cMover;
   }
 
-  spawnAsteroid() {
-    const asteroid = new Asteroid({game: this})
-    this.moverRegistry[asteroid.id] = asteroid;
+  spawnAsteroids(numAsteroids) {
+    for (let i = 0; i < numAsteroids; i++) {
+      const asteroid = new Asteroid({game: this})
+      this.moverRegistry[asteroid.id] = asteroid;
+    }
   }
 
   spawnBullet(opts) {
@@ -102,6 +111,7 @@ class GameModel {
   }
 
   recalculatePositions() {
+    this.score++;
     Object.values(this.moverRegistry).forEach(mover => {
       const newX = mover.position.x + this.calculateXVector(mover);
       const newY = mover.position.y + this.calculateYVector(mover);
@@ -141,6 +151,7 @@ class GameModel {
     // make a record of those deleted so we can remove them from the dom
     this.removedIds = new Set(collidingPairs.flat())
     collidingPairs.forEach(collidingPair => {
+      this.score += 1000;
       const [bId, aId] = collidingPair;
       delete this.moverRegistry[bId];
       delete this.moverRegistry[aId];
@@ -212,6 +223,8 @@ class GameModel {
 
       mainArea.appendChild(newMoverDiv);
     })
+    document.querySelector("#score").innerHTML = `Score: ${this.score}`;
+    document.querySelector("#remaining-asteroids").innerHTML = `Remaining Asteroids: ${this.remainingAsteroids}`;
   }
 
   reRenderUsingTranslations() {
