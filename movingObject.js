@@ -13,12 +13,16 @@ const WIDTH = 800;
 class GameModel {
   constructor() {
     this.moverRegistry = {} // maps names to references to movers along with their positional info
+    this.score = 0;
+    this.removedIds = new Set();
   }
 
   init() {
     // sets up thing to update the mover registry on an interval
     this.spawnControlledMover();
+    this.spawnAsteroid();
     this.reRender();
+    this.isAlive = true;
 
     this.useAnimationFrame = true;
     if (this.useAnimationFrame) window.requestAnimationFrame(this.reAnimateWithPositionAbsolute.bind(this))
@@ -50,8 +54,6 @@ class GameModel {
     mainAreaStyle.background = "blue";
     mainAreaStyle.width = WIDTH;
     mainAreaStyle.height = HEIGHT;
-    
-
   }
 
   calculateBulletValues(moverReference) {
@@ -64,7 +66,7 @@ class GameModel {
   }
   handleShoot(moverReference) {
     const bulletOpts = this.calculateBulletValues(moverReference);
-    this.spawnUncontrolledMover(bulletOpts)
+    this.spawnBullet(bulletOpts)
   }
 
   spawnControlledMover() {
@@ -72,8 +74,13 @@ class GameModel {
     this.moverRegistry[cMover.id] = cMover;
   }
 
-  spawnUncontrolledMover(opts) {
-    const ucMover = new Mover(opts);
+  spawnAsteroid() {
+    const asteroid = new Asteroid({game: this})
+    this.moverRegistry[asteroid.id] = asteroid;
+  }
+
+  spawnBullet(opts) {
+    const ucMover = new Bullet(opts);
     this.moverRegistry[ucMover.id] = ucMover;
   }
 
@@ -103,21 +110,49 @@ class GameModel {
         wallCorrectedSpeed, 
         wallCorrectedAngle } = this.handleWallCollisions(newX, newY, mover);
 
-      console.log(`New temp position: (${newX}, ${newY})`)
+      // console.log(`New position: (${wallCorrectedX}, ${wallCorrectedY})`)
       mover.position.x = wallCorrectedX;
       mover.position.y = wallCorrectedY;
       mover.velocity.speed = wallCorrectedSpeed;
       mover.velocity.angle = wallCorrectedAngle;
+    })
+
+    // now detect if there were object collisions
+    this.detectAndHandleObjectCollisions()
+  }
+
+  detectAndHandleObjectCollisions() {
+    // if a bullet and an asteroid hit, remove the asteroid from the mover registry and add 1000 points to the score
+    // 'hit' is defined as within 10 px box
+    const movers = Object.values(this.moverRegistry);
+    const asteroids = movers.filter(m => m instanceof Asteroid)
+    const bullets = movers.filter(m => m instanceof Bullet)
+    // colliding pairs is tuple of bId, aId
+    const collidingPairs = bullets.map(b => {
+      let tuple = undefined;
+      asteroids.forEach(a => {
+        if ((Math.abs(b.position.x - a.position.x) < 10) && (Math.abs(b.position.y - a.position.y) < 10)) {
+          if (!tuple) tuple = [b.id, a.id];
+        }
+      })
+      return tuple;
+    }).filter(t => !!t)
+
+    // make a record of those deleted so we can remove them from the dom
+    this.removedIds = new Set(collidingPairs.flat())
+    collidingPairs.forEach(collidingPair => {
+      const [bId, aId] = collidingPair;
+      delete this.moverRegistry[bId];
+      delete this.moverRegistry[aId];
     })
   }
 
   // calculate border collision and
   handleWallCollisions(newX, newY, mover) {
     const { speed, angle } = mover.velocity;
-    const { x, y } = mover.position;
     // assign the defaults since they may not change
-    let wallCorrectedX = x;
-    let wallCorrectedY = y;
+    let wallCorrectedX = newX;
+    let wallCorrectedY = newY;
     let wallCorrectedSpeed = speed;
     let wallCorrectedAngle = angle;
     // have to go in order from most specific to least specific to prevent false positives.
@@ -138,12 +173,14 @@ class GameModel {
       }
     } else if (mover instanceof Mover) {
       // no op on the x and y since change in angle will handle things for the bullets
-      wallCorrectedX = x;
-      wallCorrectedY = y;
+      wallCorrectedX = Math.min(newX, WIDTH);
+      wallCorrectedY = Math.min(newY, HEIGHT);
       if (newX < 0 || newX > WIDTH || newY < 0 || newY > HEIGHT) {
         // reverse the angle
         wallCorrectedSpeed = speed;
-        wallCorrectedAngle = angle + 90;
+        wallCorrectedAngle = Math.abs(angle) % 180 === 0 
+          ? angle + 180 
+          : angle + 90;
       }
     }
     return { wallCorrectedX, wallCorrectedY, wallCorrectedSpeed, wallCorrectedAngle };
@@ -154,6 +191,10 @@ class GameModel {
     // iterate through moverRegistry and render divs at the proper coordinates
     // mixing model and view but yolo
     const mainArea = document.querySelector("#main-area")
+    for (const deletedId of this.removedIds) {
+      const existingNode = document.querySelector(`#${deletedId}`)
+      mainArea.removeChild(existingNode);
+    }
     Object.values(this.moverRegistry).forEach(mover => {
       // remove everything and then re-add it
       const existingNode = document.querySelector(`#${mover.id}`)
@@ -207,6 +248,17 @@ class Mover {
   }
 }
 
+class Bullet extends Mover {}
+
+class Asteroid extends Mover {
+  constructor(opts = {}) {
+    super(opts);
+    this.color = "purple"
+    this.velocity.speed = 2;
+    this.velocity.angle = Math.floor(Math.random() * 360);
+  }
+}
+
 // Has methods to update the velocity manually
 class ControlledMover extends Mover {
   constructor(opts = {}) {
@@ -214,15 +266,12 @@ class ControlledMover extends Mover {
     this.color = "red";
 
     document.addEventListener("keypress", e => {
-      // debugger;
       const { code } = e;
-      // console.log('Key code is:', code, typeof code)
       this.update(code);
     })
   }
 
   update(keyCode) {
-    // debugger;
     const { DIRECTIONS, SPACE } = KEY_CODES;
     if (Object.values(DIRECTIONS).includes(keyCode)) this.updateVelocity(keyCode)
     else if (keyCode === SPACE) this.shoot();
@@ -230,11 +279,9 @@ class ControlledMover extends Mover {
   updateVelocity(direction) {
     this.updateSpeed(direction);
     this.updateDirection(direction);
-    // console.log('New speed', this.velocity.speed);
-    // console.log('New direction', this.velocity.angle);
+    console.log(`Speed: ${this.velocity.speed}, direction: ${this.velocity.angle}`)
   }
   updateSpeed(direction) {
-    // debugger;
     if (direction === DIRECTIONS.UP) {
       this.velocity.speed++;
     } else if (direction === DIRECTIONS.DOWN && this.velocity.speed > 0) {
@@ -243,7 +290,6 @@ class ControlledMover extends Mover {
   }
 
   updateDirection(direction) {
-    // debugger;
     if (direction === DIRECTIONS.LEFT) {
       this.velocity.angle += 15;
     } else if (direction === DIRECTIONS.RIGHT) {
@@ -252,7 +298,6 @@ class ControlledMover extends Mover {
   }
 
   shoot() {
-    // create a new mover (bullet) with speed
     this.game.handleShoot(this)
   }
 }
@@ -264,4 +309,3 @@ function init() {
 }
 
 init();
-

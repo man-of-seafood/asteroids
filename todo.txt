@@ -1,0 +1,4 @@
+1. add in real calculations for the position change taking into account the timestamp given by requestAnimationFrame
+2. fix collision detection for bullets and the walls
+3. add lifetime to bullets
+4. convert to typescript
