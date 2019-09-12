@@ -97,15 +97,8 @@ class GameModel {
     const radians = degrees * (Math.PI / 180);
     return radians;
   }
-  calculateXVector(mover) {
-    const radians = this.convertToRadians(mover.velocity.angle + 90);
-
-    const x =  Math.cos(radians) * mover.velocity.speed;
-    return x;
-  }
 
   determineQuadrantFromAngle(angle) {
-    angle = angle % 360;
     if (angle >= 0 && angle <= 90) {
       return 1;
     } else if (angle >= 91 && angle <= 180) {
@@ -115,14 +108,47 @@ class GameModel {
     } else if (angle >= 271 && angle <= 360) {
       return 4;
     } else {
-      return 5;
+      throw new Error("Angle not between 0 and 360 inclusive")
     }
   }
 
-  calculateYVector(mover) {
-    const radians = this.convertToRadians(mover.velocity.angle + 90);
-    const y = Math.sin(radians) * mover.velocity.speed;
-    // const quadrant = this.determineQuadrantFromAngle(mover.angle)
+  applyQuadrantToVectors(x, y, quadrant) {
+    const quadrantToCoefficients = {
+      1: [1, 1],
+      2: [1, -1],
+      3: [-1, -1],
+      4: [-1, 1]
+    };
+
+    const coefficients = quadrantToCoefficients[quadrant];
+    return { xVector: x * coefficients[0], yVector: y * coefficients[1] }
+  }
+
+  calculateVectors(mover) {
+    // get some common info liike the normalized angle 
+    const { angle, speed } = mover.velocity;
+    if (angle !== 360) debugger;
+    // first calculate the quadrant
+    const quadrant = this.determineQuadrantFromAngle(angle);
+    // normalize the angle
+    const normalizedAngle = angle > 90 ? angle % 90 : angle;
+    // now calculate the angle that describes the separation from the x axis
+    const xAxisOffsetAngle = 90 - normalizedAngle;
+
+    const radians = this.convertToRadians(xAxisOffsetAngle);
+
+    const preQuadrantX = this.calculateXVector(radians, speed);
+    const preQuadrantY = this.calculateYVector(radians, speed);
+    const { xVector, yVector } = this.applyQuadrantToVectors(preQuadrantX, preQuadrantY, quadrant);
+    return {xVector, yVector}
+  }
+  calculateXVector(radians, speed) {
+    const x =  Math.cos(radians) * speed;
+    return x;
+  }
+
+  calculateYVector(radians, speed) {
+    const y = Math.sin(radians) * speed;
     return -y;
   }
 
@@ -134,8 +160,10 @@ class GameModel {
 
   recalculatePositions() {
     Object.values(this.moverRegistry).forEach(mover => {
-      const newX = mover.position.x + this.calculateXVector(mover);
-      const newY = mover.position.y + this.calculateYVector(mover);
+      const { xVector, yVector } = this.calculateVectors(mover);
+
+      const newX = mover.position.x + xVector;
+      const newY = mover.position.y + yVector;
       const { wallCorrectedX, 
         wallCorrectedY, 
         wallCorrectedSpeed, 
@@ -211,22 +239,11 @@ class GameModel {
       wallCorrectedY = newY <= 0 ? 0 : Math.min(newY, maxAllowableY);
       // if the adjusted coords correspond to a wall boundary, reverse it
       if (wallCorrectedX === 0 || wallCorrectedX === maxAllowableX || wallCorrectedY === 0 || wallCorrectedY === maxAllowableY) {
-        // reverse the angle
-        // debugger;
         wallCorrectedSpeed = speed;
         if (Math.abs(angle) % 180 === 0) {
           wallCorrectedAngle = angle + 180 
         } else {
           wallCorrectedAngle = angle + 90
-
-          // const quadrant = this.determineQuadrantFromAngle(angle);
-          // debugger;
-          // if (quadrant == 1 || quadrant == 2) {
-          //   wallCorrectedAngle = angle + 90
-          // } else {
-          //   wallCorrectedAngle = angle - 90;
-          // }
-
         }
         console.log(
           'current angle', mover.velocity.angle, 
@@ -287,7 +304,7 @@ class GameModel {
 }
 
 class Velocity {
-  constructor(initSpeed = 0, initAngle = 0) {
+  constructor(initSpeed = 1, initAngle = 360) {
     this.speed = initSpeed; // something like px/s
     this.angle = initAngle; // something like a compass angle
   }
@@ -368,9 +385,20 @@ class ControlledMover extends Mover {
 
   updateDirection(direction) {
     if (direction === DIRECTIONS.LEFT) {
-      this.velocity.angle += 15;
-    } else if (direction === DIRECTIONS.RIGHT) {
       this.velocity.angle -= 15;
+      // keeps the angle 'rotating'
+      if (this.velocity.angle <= 0) {
+        const negativeAmount = this.velocity.angle;
+        // this will actually end up being a substraction because the angle is negative
+        this.velocity.angle = 360 + this.velocity.angle;
+      }
+    } else if (direction === DIRECTIONS.RIGHT) {
+      this.velocity.angle += 15;
+      if (this.velocity.angle > 360) {
+        const amountAbove360 = this.velocity.angle - 360;
+        this.velocity.angle = amountAbove360;
+      }
+      
     }
   }
 
