@@ -1,4 +1,6 @@
 1. add in real calculations for the position change taking into account the timestamp given by requestAnimationFrame
 2. fix collision detection for bullets and the walls
+  a. make the dimensions of stuff be encoded into the class, and factor that into the collision detection
 3. add lifetime to bullets
 4. convert to typescript
+5. draw out on paper the collision issue

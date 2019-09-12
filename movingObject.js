@@ -7,7 +7,7 @@ const DIRECTIONS = Object.freeze({
 
 const SPACE = "Space";
 const KEY_CODES = { DIRECTIONS, SPACE };
-const STARTING_ASTEROIDS = 10;
+const STARTING_ASTEROIDS = 0;
 const HEIGHT = 700;
 const WIDTH = 800;
 
@@ -104,14 +104,35 @@ class GameModel {
     return x;
   }
 
+  determineQuadrantFromAngle(angle) {
+    angle = angle % 360;
+    if (angle >= 0 && angle <= 90) {
+      return 1;
+    } else if (angle >= 91 && angle <= 180) {
+      return 2;
+    } else if(angle >= 181 && angle <= 270) {
+      return 3;
+    } else if (angle >= 271 && angle <= 360) {
+      return 4;
+    } else {
+      return 5;
+    }
+  }
+
   calculateYVector(mover) {
     const radians = this.convertToRadians(mover.velocity.angle + 90);
     const y = Math.sin(radians) * mover.velocity.speed;
+    // const quadrant = this.determineQuadrantFromAngle(mover.angle)
+    return -y;
+  }
+
+  calculateYVectorFromRaw(angle, speed) {
+    const radians = this.convertToRadians(angle + 90);
+    const y = Math.sin(radians) * speed;
     return -y;
   }
 
   recalculatePositions() {
-    this.score++;
     Object.values(this.moverRegistry).forEach(mover => {
       const newX = mover.position.x + this.calculateXVector(mover);
       const newY = mover.position.y + this.calculateYVector(mover);
@@ -141,7 +162,7 @@ class GameModel {
     const collidingPairs = bullets.map(b => {
       let tuple = undefined;
       asteroids.forEach(a => {
-        if ((Math.abs(b.position.x - a.position.x) < 10) && (Math.abs(b.position.y - a.position.y) < 10)) {
+        if ((Math.abs(b.position.x - a.position.x) < a.width) && (Math.abs(b.position.y - a.position.y) < a.height)) {
           if (!tuple) tuple = [b.id, a.id];
         }
       })
@@ -151,6 +172,7 @@ class GameModel {
     // make a record of those deleted so we can remove them from the dom
     this.removedIds = new Set(collidingPairs.flat())
     collidingPairs.forEach(collidingPair => {
+      Bullet.count--;
       this.score += 1000;
       const [bId, aId] = collidingPair;
       delete this.moverRegistry[bId];
@@ -166,9 +188,8 @@ class GameModel {
     let wallCorrectedY = newY;
     let wallCorrectedSpeed = speed;
     let wallCorrectedAngle = angle;
-    // have to go in order from most specific to least specific to prevent false positives.
-    // may just add a type field and do a strict equals check on that.
-    if (mover instanceof ControlledMover) {
+    // Player and asteroid will do the ole teleport
+    if (mover instanceof ControlledMover || mover instanceof Asteroid) {
       // no-op on the velocity for the player controlled unit because we want teleportation to happen smoothly
       wallCorrectedSpeed = speed;
       wallCorrectedAngle = angle;
@@ -182,16 +203,42 @@ class GameModel {
       } else if (newY > HEIGHT) {
         wallCorrectedY = 0;
       }
-    } else if (mover instanceof Mover) {
+    } else if (mover instanceof Bullet) {
       // no op on the x and y since change in angle will handle things for the bullets
-      wallCorrectedX = Math.min(newX, WIDTH);
-      wallCorrectedY = Math.min(newY, HEIGHT);
-      if (newX < 0 || newX > WIDTH || newY < 0 || newY > HEIGHT) {
+      const maxAllowableX = WIDTH - mover.width;
+      const maxAllowableY = HEIGHT - mover.height;
+      wallCorrectedX = newX <= 0 ? 0 : Math.min(newX, maxAllowableX);
+      wallCorrectedY = newY <= 0 ? 0 : Math.min(newY, maxAllowableY);
+      // if the adjusted coords correspond to a wall boundary, reverse it
+      if (wallCorrectedX === 0 || wallCorrectedX === maxAllowableX || wallCorrectedY === 0 || wallCorrectedY === maxAllowableY) {
         // reverse the angle
+        // debugger;
         wallCorrectedSpeed = speed;
-        wallCorrectedAngle = Math.abs(angle) % 180 === 0 
-          ? angle + 180 
-          : angle + 90;
+        if (Math.abs(angle) % 180 === 0) {
+          wallCorrectedAngle = angle + 180 
+        } else {
+          wallCorrectedAngle = angle + 90
+
+          // const quadrant = this.determineQuadrantFromAngle(angle);
+          // debugger;
+          // if (quadrant == 1 || quadrant == 2) {
+          //   wallCorrectedAngle = angle + 90
+          // } else {
+          //   wallCorrectedAngle = angle - 90;
+          // }
+
+        }
+        console.log(
+          'current angle', mover.velocity.angle, 
+          'wall corrected angle', wallCorrectedAngle,
+          'current y speed', this.calculateYVector(mover),
+          'Math.sin of current angle', Math.sin(this.convertToRadians(angle)),
+          'current angle in radians', this.convertToRadians(mover.velocity.angle),
+          'wall corrected angle in radians', this.convertToRadians(wallCorrectedAngle),
+          'Math.sin of projected angle', Math.sin(this.convertToRadians(wallCorrectedAngle)),
+          'projected y speed', this.calculateYVectorFromRaw(wallCorrectedAngle, wallCorrectedSpeed)
+        )
+        // debugger;
       }
     }
     return { wallCorrectedX, wallCorrectedY, wallCorrectedSpeed, wallCorrectedAngle };
@@ -216,8 +263,8 @@ class GameModel {
       newMoverDiv.style.position = "absolute"
       newMoverDiv.style.left = mover.position.x;
       newMoverDiv.style.top = mover.position.y;
-      newMoverDiv.style.width = 10;
-      newMoverDiv.style.height = 10;
+      newMoverDiv.style.width = mover.width;
+      newMoverDiv.style.height = mover.height;
       newMoverDiv.style.background = mover.color;
       newMoverDiv.id = mover.id;
 
@@ -225,6 +272,8 @@ class GameModel {
     })
     document.querySelector("#score").innerHTML = `Score: ${this.score}`;
     document.querySelector("#remaining-asteroids").innerHTML = `Remaining Asteroids: ${this.remainingAsteroids}`;
+    document.querySelector("#active-bullet-counter").innerHTML = `ActiveBullets: ${Bullet.count}`;
+
   }
 
   reRenderUsingTranslations() {
@@ -257,11 +306,23 @@ class Mover {
     this.position = new Position(initX, initY);
     this.id = "id-" + Math.random().toString().substring(2);
     this.game = game;
-    this.color = "green";
+    this.color = "";
+    this.width = 1;
+    this.height = 1;
   }
 }
 
-class Bullet extends Mover {}
+class Bullet extends Mover {
+  constructor(opts) {
+    super(opts)
+    this.width = 5;
+    this.height = 5;
+    this.color = "pink"
+    this.constructor.count++;
+  }
+}
+
+Bullet.count = 0;
 
 class Asteroid extends Mover {
   constructor(opts = {}) {
@@ -269,6 +330,8 @@ class Asteroid extends Mover {
     this.color = "purple"
     this.velocity.speed = 2;
     this.velocity.angle = Math.floor(Math.random() * 360);
+    this.width = 10;
+    this.height = 10;
   }
 }
 
@@ -277,7 +340,8 @@ class ControlledMover extends Mover {
   constructor(opts = {}) {
     super(opts);
     this.color = "red";
-
+    this.width = 10;
+    this.height = 10;
     document.addEventListener("keypress", e => {
       const { code } = e;
       this.update(code);
