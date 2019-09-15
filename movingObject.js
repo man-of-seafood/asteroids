@@ -7,9 +7,14 @@ const DIRECTIONS = Object.freeze({
 
 const SPACE = "Space";
 const KEY_CODES = { DIRECTIONS, SPACE };
-const STARTING_ASTEROIDS = 0;
+const STARTING_ASTEROIDS = 10;
 const HEIGHT = 700;
 const WIDTH = 800;
+
+const AXES = {
+  X: "x",
+  Y: "y"
+};
 
 class GameModel {
   constructor() {
@@ -121,34 +126,74 @@ class GameModel {
     };
 
     const coefficients = quadrantToCoefficients[quadrant];
+    // debugger;
     return { xVector: x * coefficients[0], yVector: y * coefficients[1] }
   }
 
-  calculateVectors(mover) {
-    // get some common info liike the normalized angle 
-    const { angle, speed } = mover.velocity;
-    if (angle !== 360) debugger;
-    // first calculate the quadrant
-    const quadrant = this.determineQuadrantFromAngle(angle);
-    // normalize the angle
-    const normalizedAngle = angle > 90 ? angle % 90 : angle;
-    // now calculate the angle that describes the separation from the x axis
-    const xAxisOffsetAngle = 90 - normalizedAngle;
+  /**
+   * 
+   * @param {number} angle 
+   * @returns {String} An axis (x or y)
+   */
+  determineClosestAxisFromAngle(angle) {
+    const axisAngles = [0, 90, 180, 270, 360];
+    
+    const axisAnglesToAxis = {
+      0: AXES.Y,
+      90: AXES.X,
+      180: AXES.Y,
+      270: AXES.X,
+      360: AXES.Y
+    };
 
-    const radians = this.convertToRadians(xAxisOffsetAngle);
-
-    const preQuadrantX = this.calculateXVector(radians, speed);
-    const preQuadrantY = this.calculateYVector(radians, speed);
-    const { xVector, yVector } = this.applyQuadrantToVectors(preQuadrantX, preQuadrantY, quadrant);
-    return {xVector, yVector}
+    // find the index of the min delta
+    let closestAxisAngle;
+    let lowestDelta = 360; // 359 is technically the highest, so any delta should be lowest
+    axisAngles.forEach((axisAngle, index) => {
+      const delta = Math.abs(axisAngle - angle)
+      if (delta < lowestDelta) {
+        lowestDelta = delta;
+        closestAxisAngle = axisAngle;
+      }
+    })
+    
+    return {
+      axisAngle: closestAxisAngle,
+      axis: axisAnglesToAxis[closestAxisAngle]
+    };
   }
+
+  calculateVectors({angle, speed}) {
+    // const { angle, speed } = mover.velocity;
+    const {axisAngle, axis: closestAxis} = this.determineClosestAxisFromAngle(angle);
+
+    // now calculate the angle that describes the separation from the axis it's closest to 
+    const closestAxisOffsetAngle = Math.abs(axisAngle - angle);
+    const radians = this.convertToRadians(closestAxisOffsetAngle);
+    
+    let xVector = this.calculateXVector(radians, speed);
+    let yVector = this.calculateYVector(radians, speed);
+    
+    if (closestAxis === AXES.Y) {
+      let tmp = xVector;
+      xVector = -yVector;
+      yVector = -tmp;
+    }
+
+    const quadrant = this.determineQuadrantFromAngle(angle);
+    let { xVector: finalX, yVector: finalY } = this.applyQuadrantToVectors(xVector, yVector, quadrant);
+    return { xVector: finalX, yVector: finalY }
+  }
+
   calculateXVector(radians, speed) {
-    const x =  Math.cos(radians) * speed;
+    const coefficient = Math.cos(radians);
+    const x = coefficient * speed;
     return x;
   }
 
   calculateYVector(radians, speed) {
-    const y = Math.sin(radians) * speed;
+    const coefficient = Math.sin(radians);
+    const y = coefficient * speed;
     return -y;
   }
 
@@ -158,10 +203,13 @@ class GameModel {
     return -y;
   }
 
-  recalculatePositions() {
+  recalculatePositions = () => {
     Object.values(this.moverRegistry).forEach(mover => {
-      const { xVector, yVector } = this.calculateVectors(mover);
+      const { xVector, yVector } = this.calculateVectors(mover.velocity);
+      if (mover instanceof ControlledMover) {
 
+        console.log(`New vector: (${xVector}, ${yVector})`)
+      }
       const newX = mover.position.x + xVector;
       const newY = mover.position.y + yVector;
       const { wallCorrectedX, 
@@ -173,7 +221,7 @@ class GameModel {
       mover.position.x = wallCorrectedX;
       mover.position.y = wallCorrectedY;
       mover.velocity.speed = wallCorrectedSpeed;
-      mover.velocity.angle = wallCorrectedAngle;
+      mover.setAngle(wallCorrectedAngle);
     })
 
     // now detect if there were object collisions
@@ -237,25 +285,28 @@ class GameModel {
       const maxAllowableY = HEIGHT - mover.height;
       wallCorrectedX = newX <= 0 ? 0 : Math.min(newX, maxAllowableX);
       wallCorrectedY = newY <= 0 ? 0 : Math.min(newY, maxAllowableY);
-      // if the adjusted coords correspond to a wall boundary, reverse it
+      // if the adjusted coords correspond to a wall boundary, make it bounce off
       if (wallCorrectedX === 0 || wallCorrectedX === maxAllowableX || wallCorrectedY === 0 || wallCorrectedY === maxAllowableY) {
-        wallCorrectedSpeed = speed;
+        const { xVector, yVector } = this.calculateVectors(mover.velocity);
+        // debugger
+        // wallCorrectedSpeed = speed;
         if (Math.abs(angle) % 180 === 0) {
           wallCorrectedAngle = angle + 180 
         } else {
-          wallCorrectedAngle = angle + 90
+          // if hitting a side boundary, reflect across X axis
+          
+          // if hitting a a top/bottom boundary, reflect across y
         }
+        const acceptableWallCorrected = mover.calculateAcceptableAngle(wallCorrectedAngle);
+        const { xVector: projX, yVector: projY } = this.calculateVectors({angle: acceptableWallCorrected, speed: wallCorrectedSpeed});
+        
+
         console.log(
           'current angle', mover.velocity.angle, 
-          'wall corrected angle', wallCorrectedAngle,
-          'current y speed', this.calculateYVector(mover),
-          'Math.sin of current angle', Math.sin(this.convertToRadians(angle)),
-          'current angle in radians', this.convertToRadians(mover.velocity.angle),
-          'wall corrected angle in radians', this.convertToRadians(wallCorrectedAngle),
-          'Math.sin of projected angle', Math.sin(this.convertToRadians(wallCorrectedAngle)),
-          'projected y speed', this.calculateYVectorFromRaw(wallCorrectedAngle, wallCorrectedSpeed)
+          'wall corrected, acceptable angle', acceptableWallCorrected,
+          'current y speed', yVector,
+          'projected y speed', projY
         )
-        // debugger;
       }
     }
     return { wallCorrectedX, wallCorrectedY, wallCorrectedSpeed, wallCorrectedAngle };
@@ -327,6 +378,32 @@ class Mover {
     this.width = 1;
     this.height = 1;
   }
+
+
+  calculateAcceptableAngle(rawAngle) {
+    if (rawAngle <= 0) {
+      const negativeAmount = rawAngle;
+      return 360 + negativeAmount;
+    } if (rawAngle > 360) {
+      const amountAbove360 = rawAngle - 360;
+      return  amountAbove360;
+    }
+    return rawAngle;
+  }
+
+  updateAngle(angleDelta) {
+    const rawNewAngle = this.velocity.angle + angleDelta;
+    this.velocity.angle = this.calculateAcceptableAngle(rawNewAngle);
+  }
+
+  setAngle(newAngle) {
+    this.velocity.angle = this.calculateAcceptableAngle(newAngle);
+  }
+
+  updateVelocity() {
+
+  }
+
 }
 
 class Bullet extends Mover {
@@ -363,6 +440,7 @@ class ControlledMover extends Mover {
       const { code } = e;
       this.update(code);
     })
+    console.log('this', this)
   }
 
   update(keyCode) {
@@ -385,20 +463,12 @@ class ControlledMover extends Mover {
 
   updateDirection(direction) {
     if (direction === DIRECTIONS.LEFT) {
-      this.velocity.angle -= 15;
-      // keeps the angle 'rotating'
-      if (this.velocity.angle <= 0) {
-        const negativeAmount = this.velocity.angle;
-        // this will actually end up being a substraction because the angle is negative
-        this.velocity.angle = 360 + this.velocity.angle;
-      }
-    } else if (direction === DIRECTIONS.RIGHT) {
-      this.velocity.angle += 15;
-      if (this.velocity.angle > 360) {
-        const amountAbove360 = this.velocity.angle - 360;
-        this.velocity.angle = amountAbove360;
-      }
+      // convert this into a setter and add it to the mover base class so that controlled movers and bullets can get this
+      // the correction logic will be in there as well 
+      this.updateAngle(-15);
       
+    } else if (direction === DIRECTIONS.RIGHT) {
+      this.updateAngle(15);
     }
   }
 
