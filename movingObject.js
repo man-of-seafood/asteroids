@@ -185,6 +185,39 @@ class GameModel {
     return { xVector: finalX, yVector: finalY }
   }
 
+  // haven't yet figured out elegant function like side collision, but it is x reflection for\
+  // top bottom collision
+  // x pos, y neg => add angle relative to X to nearest axis (reflect closest axis angle cross x axis) (90 + (90 - angle))
+  // x pos, y pos => (90 - (angle - 90))
+  // x neg, y neg =>  (270 - (angle - 270))
+  // x neg, y pos => 270 + (270 - angle)
+
+  // side ( mirrored y angle)
+
+  // x pos, y neg => Math.abs(360 - angle)
+  // x pos, y pos => Math.abs(360 - angle) 
+  // x neg, y neg => Math.abs(360 - angle)
+  // x neg, y pos => Math.abs(360 - angle)
+
+  calculateWallReflectedAngle(angle, xVector, yVector, isSideBoundary) {
+    const isPositive = num => num > 0;
+
+    if (isSideBoundary) {
+      const yReflectedAngle = Math.abs(360 - angle);
+      return yReflectedAngle
+    } else {
+      if (isPositive(xVector) && !isPositive(yVector)) {
+        return 90 + (90 - angle);
+      } else if (isPositive(xVector) && isPositive(yVector)) {
+        return 90 - (angle - 90);
+      } else if (!isPositive(xVector) && !isPositive(yVector)) {
+        return 270 - (angle - 270);
+      } else if (!isPositive(xVector) && isPositive(yVector)) {
+        return 270 + (270 - angle);
+      }
+    }
+  }
+
   calculateXVector(radians, speed) {
     const coefficient = Math.cos(radians);
     const x = coefficient * speed;
@@ -293,9 +326,8 @@ class GameModel {
         if (Math.abs(angle) % 180 === 0) {
           wallCorrectedAngle = angle + 180 
         } else {
-          // if hitting a side boundary, reflect across X axis
-          
-          // if hitting a a top/bottom boundary, reflect across y
+          const isSideBoundary = wallCorrectedX === 0 || wallCorrectedX === maxAllowableX
+          wallCorrectedAngle = this.calculateWallReflectedAngle(angle, xVector, yVector, isSideBoundary);
         }
         const acceptableWallCorrected = mover.calculateAcceptableAngle(wallCorrectedAngle);
         const { xVector: projX, yVector: projY } = this.calculateVectors({angle: acceptableWallCorrected, speed: wallCorrectedSpeed});
