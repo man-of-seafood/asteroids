@@ -1,6 +1,6 @@
-import ControlledMover from "Movers/ControlledMover"
-import Asteroid from "Movers/Asteroid"
-import Bullet from "Movers/Bullet"
+import ControlledMover from "movers/ControlledMover"
+import Asteroid from "movers/Asteroid"
+import Bullet from "movers/Bullet"
 
 
 const STARTING_ASTEROIDS = 10;
