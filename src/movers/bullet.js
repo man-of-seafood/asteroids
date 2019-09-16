@@ -1,4 +1,4 @@
-import Mover from "movers/mover"
+import Mover from "./mover"
 
 class Bullet extends Mover {
   constructor(opts) {
@@ -11,3 +11,5 @@ class Bullet extends Mover {
 }
 
 Bullet.count = 0;
+
+export default Bullet;

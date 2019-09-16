@@ -1,5 +1,5 @@
-import Velocity from "graphics/velocity"
-import Position from "graphics/position"
+import Velocity from "../graphics/velocity"
+import Position from "../graphics/position"
 
 class Mover {
   constructor({ initX, initY, initSpeed, initAngle, game } = {}) {

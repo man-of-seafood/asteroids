@@ -1,4 +1,4 @@
-import GameModel from "gameModel"
+import GameModel from "./gameModel"
 
 function init() {
   const game = new GameModel();

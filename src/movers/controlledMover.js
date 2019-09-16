@@ -1,5 +1,5 @@
-import Mover from "movers/mover"
-import KEY_CODES from "constants/keyCodes"
+import Mover from "./mover"
+import KEY_CODES from "../constants/keyCodes"
 
 const { DIRECTIONS } = KEY_CODES;
 
@@ -13,7 +13,6 @@ class ControlledMover extends Mover {
       const { code } = e;
       this.update(code);
     })
-    console.log('this', this)
   }
 
   update(keyCode) {
@@ -24,7 +23,6 @@ class ControlledMover extends Mover {
   updateVelocity(direction) {
     this.updateSpeed(direction);
     this.updateDirection(direction);
-    console.log(`Speed: ${this.velocity.speed}, direction: ${this.velocity.angle}`)
   }
   updateSpeed(direction) {
     if (direction === DIRECTIONS.UP) {

@@ -1,6 +1,6 @@
-import ControlledMover from "movers/ControlledMover"
-import Asteroid from "movers/Asteroid"
-import Bullet from "movers/Bullet"
+import ControlledMover from "./movers/controlledMover"
+import Asteroid from "./movers/asteroid"
+import Bullet from "./movers/bullet"
 
 
 const STARTING_ASTEROIDS = 10;
@@ -20,16 +20,16 @@ class GameModel {
     this.score = 0;
     this.remainingAsteroids = STARTING_ASTEROIDS;
     this.removedIds = new Set();
-    this.width = width;
-    this.height = height;
+    this.width = WIDTH;
+    this.height = HEIGHT;
+    this.isAlive = true;
   }
 
-  init() {
+  init() { 
     // sets up thing to update the mover registry on an interval
     this.spawnControlledMover();
     this.spawnAsteroids(STARTING_ASTEROIDS);
     this.reRender();
-    this.isAlive = true;
 
     this.useAnimationFrame = true;
     if (this.useAnimationFrame) window.requestAnimationFrame(this.reAnimateWithPositionAbsolute.bind(this))
@@ -42,8 +42,9 @@ class GameModel {
     this.setMainAreaStyle();
   }
 
-  reAnimateWithPositionAbsolute() {
-      this.recalculatePositions();
+  reAnimateWithPositionAbsolute(timestamp) {
+    if (!this.isAlive) return;
+      this.recalculatePositions(timestamp);
       this.recalculateRemainingAsteroids();
       this.reRender();
       if (this.useAnimationFrame) window.requestAnimationFrame(this.reAnimateWithPositionAbsolute.bind(this))
@@ -82,7 +83,7 @@ class GameModel {
   }
 
   spawnControlledMover() {
-    const cMover = new ControlledMover({game: this});
+    const cMover = new ControlledMover({ initX: Math.random() * this.width, initY: Math.random() * this.height, game: this});
     this.moverRegistry[cMover.id] = cMover;
   }
 
@@ -126,7 +127,6 @@ class GameModel {
     };
 
     const coefficients = quadrantToCoefficients[quadrant];
-    // debugger;
     return { xVector: x * coefficients[0], yVector: y * coefficients[1] }
   }
 
@@ -236,13 +236,10 @@ class GameModel {
     return -y;
   }
 
-  recalculatePositions = () => {
+  recalculatePositions(timestamp) {
+    // console.log(timestamp);
     Object.values(this.moverRegistry).forEach(mover => {
       const { xVector, yVector } = this.calculateVectors(mover.velocity);
-      if (mover instanceof ControlledMover) {
-
-        console.log(`New vector: (${xVector}, ${yVector})`)
-      }
       const newX = mover.position.x + xVector;
       const newY = mover.position.y + yVector;
       const { wallCorrectedX, 
@@ -250,7 +247,7 @@ class GameModel {
         wallCorrectedSpeed, 
         wallCorrectedAngle } = this.handleWallCollisions(newX, newY, mover);
 
-      // console.log(`New position: (${wallCorrectedX}, ${wallCorrectedY})`)
+
       mover.position.x = wallCorrectedX;
       mover.position.y = wallCorrectedY;
       mover.velocity.speed = wallCorrectedSpeed;
@@ -259,6 +256,7 @@ class GameModel {
 
     // now detect if there were object collisions
     this.detectAndHandleObjectCollisions()
+    this.detectAndHandleAsteroidCollisions()
   }
 
   detectAndHandleObjectCollisions() {
@@ -286,6 +284,19 @@ class GameModel {
       const [bId, aId] = collidingPair;
       delete this.moverRegistry[bId];
       delete this.moverRegistry[aId];
+    })
+  }
+
+  detectAndHandleAsteroidCollisions() {
+    const movers = Object.values(this.moverRegistry);
+    const asteroids = movers.filter(m => m instanceof Asteroid)
+    const player = movers.find(m => m instanceof ControlledMover)
+    asteroids.forEach(a => {
+      if ((Math.abs(player.position.x - a.position.x) < a.width) && (Math.abs(player.position.y - a.position.y) < a.height)) {
+        this.isAlive = false;
+        this.removedIds.add(player.id)
+        delete this.moverRegistry[player.id];
+      }
     })
   }
 
@@ -321,24 +332,12 @@ class GameModel {
       // if the adjusted coords correspond to a wall boundary, make it bounce off
       if (wallCorrectedX === 0 || wallCorrectedX === maxAllowableX || wallCorrectedY === 0 || wallCorrectedY === maxAllowableY) {
         const { xVector, yVector } = this.calculateVectors(mover.velocity);
-        // debugger
-        // wallCorrectedSpeed = speed;
         if (Math.abs(angle) % 180 === 0) {
           wallCorrectedAngle = angle + 180 
         } else {
           const isSideBoundary = wallCorrectedX === 0 || wallCorrectedX === maxAllowableX
           wallCorrectedAngle = this.calculateWallReflectedAngle(angle, xVector, yVector, isSideBoundary);
         }
-        const acceptableWallCorrected = mover.calculateAcceptableAngle(wallCorrectedAngle);
-        const { xVector: projX, yVector: projY } = this.calculateVectors({angle: acceptableWallCorrected, speed: wallCorrectedSpeed});
-        
-
-        console.log(
-          'current angle', mover.velocity.angle, 
-          'wall corrected, acceptable angle', acceptableWallCorrected,
-          'current y speed', yVector,
-          'projected y speed', projY
-        )
       }
     }
     return { wallCorrectedX, wallCorrectedY, wallCorrectedSpeed, wallCorrectedAngle };
@@ -373,6 +372,9 @@ class GameModel {
     document.querySelector("#score").innerHTML = `Score: ${this.score}`;
     document.querySelector("#remaining-asteroids").innerHTML = `Remaining Asteroids: ${this.remainingAsteroids}`;
     document.querySelector("#active-bullet-counter").innerHTML = `ActiveBullets: ${Bullet.count}`;
+    if (!this.isAlive) {
+      document.querySelector("#you-died").innerHTML = `Y O U${"             "}D I E D`;
+    }
 
   }
 
