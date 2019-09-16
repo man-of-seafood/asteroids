@@ -1,3 +1,5 @@
+import Mover from "Movers/mover"
+
 class Asteroid extends Mover {
   constructor(opts = {}) {
     super(opts);
@@ -8,3 +10,5 @@ class Asteroid extends Mover {
     this.height = 10;
   }
 }
+
+export default Asteroid;

@@ -7,3 +7,5 @@ const DIRECTIONS = Object.freeze({
 
 const SPACE = "Space";
 const KEY_CODES = { DIRECTIONS, SPACE };
+
+export default KEY_CODES

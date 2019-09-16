@@ -1,3 +1,8 @@
+import ControlledMover from "Movers/ControlledMover"
+import Asteroid from "Movers/Asteroid"
+import Bullet from "Movers/Bullet"
+
+
 const STARTING_ASTEROIDS = 10;
 const AXES = {
   X: "x",
@@ -10,11 +15,13 @@ const WIDTH = 800;
 
 
 class GameModel {
-  constructor() {
+  constructor(width, height) {
     this.moverRegistry = {} // maps names to references to movers along with their positional info
     this.score = 0;
     this.remainingAsteroids = STARTING_ASTEROIDS;
     this.removedIds = new Set();
+    this.width = width;
+    this.height = height;
   }
 
   init() {
@@ -378,3 +385,5 @@ class GameModel {
     })
   }
 }
+
+export default GameModel;

@@ -1,4 +1,8 @@
-// Has methods to update the velocity manually
+import Mover from "Movers/mover"
+import KEY_CODES from "Movers/constants/keyCodes"
+
+const { DIRECTIONS } = KEY_CODES;
+
 class ControlledMover extends Mover {
   constructor(opts = {}) {
     super(opts);
@@ -45,3 +49,5 @@ class ControlledMover extends Mover {
     this.game.handleShoot(this)
   }
 }
+
+export default ControlledMover;
