@@ -1,3 +1,5 @@
+import Mover from "movers/mover"
+
 class Bullet extends Mover {
   constructor(opts) {
     super(opts)

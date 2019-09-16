@@ -1,4 +1,4 @@
-import Mover from "Movers/mover"
+import Mover from "movers/mover"
 import KEY_CODES from "Movers/constants/keyCodes"
 
 const { DIRECTIONS } = KEY_CODES;

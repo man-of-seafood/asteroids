@@ -1,4 +1,4 @@
-import Mover from "Movers/mover"
+import Mover from "movers/mover"
 
 class Asteroid extends Mover {
   constructor(opts = {}) {

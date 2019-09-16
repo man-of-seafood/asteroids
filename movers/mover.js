@@ -1,3 +1,6 @@
+import Velocity from "graphics/velocity"
+import Position from "graphics/position"
+
 class Mover {
   constructor({ initX, initY, initSpeed, initAngle, game } = {}) {
     this.velocity = new Velocity(initSpeed, initAngle);
@@ -35,3 +38,6 @@ class Mover {
   }
 
 }
+
+
+export default Mover;
