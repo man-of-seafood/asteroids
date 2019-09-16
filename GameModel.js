@@ -1,20 +1,13 @@
-const DIRECTIONS = Object.freeze({
-  UP: "KeyW",
-  DOWN: "KeyS",
-  LEFT: "KeyA",
-  RIGHT: "KeyD"
-});
-
-const SPACE = "Space";
-const KEY_CODES = { DIRECTIONS, SPACE };
 const STARTING_ASTEROIDS = 10;
-const HEIGHT = 700;
-const WIDTH = 800;
-
 const AXES = {
   X: "x",
   Y: "y"
 };
+
+const HEIGHT = 700;
+const WIDTH = 800;
+
+
 
 class GameModel {
   constructor() {
@@ -385,134 +378,3 @@ class GameModel {
     })
   }
 }
-
-class Velocity {
-  constructor(initSpeed = 1, initAngle = 360) {
-    this.speed = initSpeed; // something like px/s
-    this.angle = initAngle; // something like a compass angle
-  }
-}
-
-class Position {
-  constructor(initX , initY) {
-    this.x = initX || Math.floor(Math.random() * WIDTH)
-    this.y = initY || Math.floor(Math.random() * HEIGHT)
-  }
-}
-
-class Mover {
-  constructor({ initX, initY, initSpeed, initAngle, game } = {}) {
-    this.velocity = new Velocity(initSpeed, initAngle);
-    this.position = new Position(initX, initY);
-    this.id = "id-" + Math.random().toString().substring(2);
-    this.game = game;
-    this.color = "";
-    this.width = 1;
-    this.height = 1;
-  }
-
-
-  calculateAcceptableAngle(rawAngle) {
-    if (rawAngle <= 0) {
-      const negativeAmount = rawAngle;
-      return 360 + negativeAmount;
-    } if (rawAngle > 360) {
-      const amountAbove360 = rawAngle - 360;
-      return  amountAbove360;
-    }
-    return rawAngle;
-  }
-
-  updateAngle(angleDelta) {
-    const rawNewAngle = this.velocity.angle + angleDelta;
-    this.velocity.angle = this.calculateAcceptableAngle(rawNewAngle);
-  }
-
-  setAngle(newAngle) {
-    this.velocity.angle = this.calculateAcceptableAngle(newAngle);
-  }
-
-  updateVelocity() {
-
-  }
-
-}
-
-class Bullet extends Mover {
-  constructor(opts) {
-    super(opts)
-    this.width = 5;
-    this.height = 5;
-    this.color = "pink"
-    this.constructor.count++;
-  }
-}
-
-Bullet.count = 0;
-
-class Asteroid extends Mover {
-  constructor(opts = {}) {
-    super(opts);
-    this.color = "purple"
-    this.velocity.speed = 2;
-    this.velocity.angle = Math.floor(Math.random() * 360);
-    this.width = 10;
-    this.height = 10;
-  }
-}
-
-// Has methods to update the velocity manually
-class ControlledMover extends Mover {
-  constructor(opts = {}) {
-    super(opts);
-    this.color = "red";
-    this.width = 10;
-    this.height = 10;
-    document.addEventListener("keypress", e => {
-      const { code } = e;
-      this.update(code);
-    })
-    console.log('this', this)
-  }
-
-  update(keyCode) {
-    const { DIRECTIONS, SPACE } = KEY_CODES;
-    if (Object.values(DIRECTIONS).includes(keyCode)) this.updateVelocity(keyCode)
-    else if (keyCode === SPACE) this.shoot();
-  }
-  updateVelocity(direction) {
-    this.updateSpeed(direction);
-    this.updateDirection(direction);
-    console.log(`Speed: ${this.velocity.speed}, direction: ${this.velocity.angle}`)
-  }
-  updateSpeed(direction) {
-    if (direction === DIRECTIONS.UP) {
-      this.velocity.speed++;
-    } else if (direction === DIRECTIONS.DOWN && this.velocity.speed > 0) {
-      this.velocity.speed--;
-    }
-  }
-
-  updateDirection(direction) {
-    if (direction === DIRECTIONS.LEFT) {
-      // convert this into a setter and add it to the mover base class so that controlled movers and bullets can get this
-      // the correction logic will be in there as well 
-      this.updateAngle(-15);
-      
-    } else if (direction === DIRECTIONS.RIGHT) {
-      this.updateAngle(15);
-    }
-  }
-
-  shoot() {
-    this.game.handleShoot(this)
-  }
-}
-
-function init() {
-  const game = new GameModel();
-  game.init();
-  window.game = game;
-}
-
-init();

@@ -1,0 +1,25 @@
+{
+  "name": "basteroids",
+  "version": "1.0.0",
+  "description": "A browser based battle royale game of asteroids",
+  "main": "movingObject.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/man-of-seafood/basteroids.git"
+  },
+  "author": "Mason Raasch",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/man-of-seafood/basteroids/issues"
+  },
+  "homepage": "https://github.com/man-of-seafood/basteroids#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "babel-eslint": "^10.0.3",
+    "eslint": "^6.4.0",
+    "eslint-plugin-react": "^7.14.3"
+  }
+}
