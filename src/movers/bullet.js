@@ -7,7 +7,14 @@ class Bullet extends Mover {
     this.height = 5;
     this.color = "pink"
     this.constructor.count++;
+    this.remainingLifetime = 1000; // value in ms
   }
+
+  remove() {
+    super.remove();
+    this.constructor.count --;
+  }
+
 }
 
 Bullet.count = 0;

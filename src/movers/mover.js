@@ -37,6 +37,10 @@ class Mover {
 
   }
 
+  remove() {
+    this.game.removeMover(this.id);
+  }
+
 }
 
 

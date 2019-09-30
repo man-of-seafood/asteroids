@@ -19,10 +19,11 @@ class GameModel {
     this.moverRegistry = {} // maps names to references to movers along with their positional info
     this.score = 0;
     this.remainingAsteroids = STARTING_ASTEROIDS;
-    this.removedIds = new Set();
+    this.hasWon = false;
     this.width = WIDTH;
     this.height = HEIGHT;
     this.isAlive = true;
+    this.lastRecordedTimestamp = null;
   }
 
   init() { 
@@ -30,7 +31,6 @@ class GameModel {
     this.spawnControlledMover();
     this.spawnAsteroids(STARTING_ASTEROIDS);
     this.reRender();
-
     this.useAnimationFrame = true;
     if (this.useAnimationFrame) window.requestAnimationFrame(this.reAnimateWithPositionAbsolute.bind(this))
     else {
@@ -43,15 +43,26 @@ class GameModel {
   }
 
   reAnimateWithPositionAbsolute(timestamp) {
+    if (!this.lastRecordedTimestamp) this.lastRecordedTimestamp = timestamp;
+    const delta = timestamp - this.lastRecordedTimestamp;
+    this.lastRecordedTimestamp = timestamp;
     if (!this.isAlive) return;
-      this.recalculatePositions(timestamp);
-      this.recalculateRemainingAsteroids();
-      this.reRender();
-      if (this.useAnimationFrame) window.requestAnimationFrame(this.reAnimateWithPositionAbsolute.bind(this))
+    this.updateBulletLifespans(delta)
+    this.recalculatePositions(delta);
+    this.recalculateRemainingAsteroids();
+    this.checkIfWon(this.remainingAsteroids)
+    this.reRender();
+    if (this.useAnimationFrame) window.requestAnimationFrame(this.reAnimateWithPositionAbsolute.bind(this))
   }
 
   recalculateRemainingAsteroids() {
     this.remainingAsteroids = Object.values(this.moverRegistry).filter(m => m instanceof Asteroid).length;
+  }
+
+  checkIfWon(remainingAsteroids) {
+    if (remainingAsteroids === 0) {
+      this.hasWon = true;
+    }
   }
   reAnimateWithTransitions() {
     this.recalculatePositions();
@@ -236,7 +247,11 @@ class GameModel {
     return -y;
   }
 
-  recalculatePositions(timestamp) {
+  getBullets() {
+    return Object.values(this.moverRegistry).filter(mover => mover instanceof Bullet);
+  }
+
+  recalculatePositions(delta) {
     // console.log(timestamp);
     Object.values(this.moverRegistry).forEach(mover => {
       const { xVector, yVector } = this.calculateVectors(mover.velocity);
@@ -259,6 +274,25 @@ class GameModel {
     this.detectAndHandleAsteroidCollisions()
   }
 
+  /**
+   * Updates bullet lifetime and removes it if <= 0
+   * @param {Date} timestamp 
+   */
+  updateBulletLifespans(delta) {
+    // locate all bullets and subtract the delta from their lifespans
+    this.getBullets().forEach(bullet => {
+      // debugger;
+      bullet.remainingLifetime -= delta;
+      if (bullet.remainingLifetime <= 0) {
+        bullet.remove();
+      }
+    })
+  }
+
+  removeMover(moverId) {
+    delete this.moverRegistry[moverId];
+  }
+
   detectAndHandleObjectCollisions() {
     // if a bullet and an asteroid hit, remove the asteroid from the mover registry and add 1000 points to the score
     // 'hit' is defined as within 10 px box
@@ -276,8 +310,6 @@ class GameModel {
       return tuple;
     }).filter(t => !!t)
 
-    // make a record of those deleted so we can remove them from the dom
-    this.removedIds = new Set(collidingPairs.flat())
     collidingPairs.forEach(collidingPair => {
       Bullet.count--;
       this.score += 1000;
@@ -294,7 +326,6 @@ class GameModel {
     asteroids.forEach(a => {
       if ((Math.abs(player.position.x - a.position.x) < a.width) && (Math.abs(player.position.y - a.position.y) < a.height)) {
         this.isAlive = false;
-        this.removedIds.add(player.id)
         delete this.moverRegistry[player.id];
       }
     })
@@ -343,22 +374,18 @@ class GameModel {
     return { wallCorrectedX, wallCorrectedY, wallCorrectedSpeed, wallCorrectedAngle };
   }
 
-  // can also be used as the initial render call when using translations to animate
+
+
+  // Removes all moving elements from the DOM and re-adds them with their updated coordinates.
   reRender() {
-    // iterate through moverRegistry and render divs at the proper coordinates
-    // mixing model and view but yolo
+    // clear the DOM
+    const allMovers = document.querySelectorAll(".mover")
+    allMovers.forEach(mover => mover.remove())
     const mainArea = document.querySelector("#main-area")
-    for (const deletedId of this.removedIds) {
-      const existingNode = document.querySelector(`#${deletedId}`)
-      mainArea.removeChild(existingNode);
-    }
+    // Add everything in that's still in the registry
     Object.values(this.moverRegistry).forEach(mover => {
-      // remove everything and then re-add it
-      const existingNode = document.querySelector(`#${mover.id}`)
-      if (existingNode) {
-        mainArea.removeChild(existingNode);
-      }
       const newMoverDiv = document.createElement("div");
+      newMoverDiv.className = "mover";
       newMoverDiv.style.position = "absolute"
       newMoverDiv.style.left = mover.position.x;
       newMoverDiv.style.top = mover.position.y;
@@ -374,6 +401,8 @@ class GameModel {
     document.querySelector("#active-bullet-counter").innerHTML = `ActiveBullets: ${Bullet.count}`;
     if (!this.isAlive) {
       document.querySelector("#you-died").innerHTML = `Y O U${"             "}D I E D`;
+    } else if (this.hasWon) {
+      document.querySelector("#you-won").innerHTML = "Y O U     D I D  I T.    G O O D   J O B";
     }
 
   }
