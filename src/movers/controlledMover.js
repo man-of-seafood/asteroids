@@ -13,6 +13,7 @@ class ControlledMover extends Mover {
       const { code } = e;
       this.update(code);
     })
+    this.minSpeed = 0;
   }
 
   update(keyCode) {
@@ -27,8 +28,15 @@ class ControlledMover extends Mover {
   updateSpeed(direction) {
     if (direction === DIRECTIONS.UP) {
       this.velocity.speed++;
-    } else if (direction === DIRECTIONS.DOWN && this.velocity.speed > 0) {
+    } else if (direction === DIRECTIONS.DOWN && this.velocity.speed > this.minSpeed) {
       this.velocity.speed--;
+    }
+  }
+
+  setMinimumSpeed(newMin) {
+    this.minSpeed = newMin;
+    if (this.velocity.speed < newMin) {
+      this.velocity.speed = newMin;
     }
   }
 
