@@ -12,48 +12,114 @@ const AXES = {
 const HEIGHT = 700;
 const WIDTH = 800;
 
+function sum (nums) {
+  return nums.reduce((sum, curr) => sum + curr);
+}
 
+function average(nums) {
+  return sum(nums) / nums.length;
+}
 
 class GameModel {
   constructor(width, height) {
     this.moverRegistry = {} // maps names to references to movers along with their positional info
+    this.cMoverId = null; // id of the player's mover
     this.score = 0;
     this.remainingAsteroids = STARTING_ASTEROIDS;
     this.hasWon = false;
     this.width = WIDTH;
     this.height = HEIGHT;
     this.isAlive = true;
+
     this.lastRecordedTimestamp = null;
+    this.initialTimestamp;
+    this.elapsedTime = 0;
+    this.recentFrameRates = [];
+    this.movingAverage = 0;
   }
 
   init() { 
     // sets up thing to update the mover registry on an interval
     this.spawnControlledMover();
     this.spawnAsteroids(STARTING_ASTEROIDS);
-    this.reRender();
-    this.useAnimationFrame = true;
-    if (this.useAnimationFrame) window.requestAnimationFrame(this.reAnimateWithPositionAbsolute.bind(this))
-    else {
-       setInterval(() => {
-         this.reAnimateWithPositionAbsolute()
-        }, 1000/120)
-    }
 
     this.setMainAreaStyle();
+    // state updates are bundled with the render call so that
+    // we don't run into a situation where a slight difference in timing of state update completion and rendering results in
+    // a rendering of a frame that is based off a model that's had two state updates
+
+    // because the state updates will happen (semi) unpredictably, we use the timestamp
+    // provided by request animation frame to determine how much time has elapsed
+    // since the last update. 
+    window.requestAnimationFrame(this.updateState.bind(this))
+
   }
 
-  reAnimateWithPositionAbsolute(timestamp) {
-    if (!this.lastRecordedTimestamp) this.lastRecordedTimestamp = timestamp;
-    const delta = timestamp - this.lastRecordedTimestamp;
+  updateState(timestamp) {
+    if (!this.lastRecordedTimestamp) this.initialTimestamp = this.lastRecordedTimestamp = timestamp;
+    // Default is 60 to avoid division by 0 error that would present itself in the case 
+    // that this is the first frame being rendered (timestamp === lastRecordedStamp)
+    const renderTimeDelta = (timestamp === this.lastRecordedTimestamp)
+      ? 60
+      : timestamp - this.lastRecordedTimestamp;
+    this.elapsedTime += renderTimeDelta;
     this.lastRecordedTimestamp = timestamp;
-    if (!this.isAlive) return;
-    this.updateBulletLifespans(delta)
-    this.recalculatePositions(delta);
+    const fps = 1000 / renderTimeDelta;
+    // add this into the array the holds recent fps calculations
+    this.updateRecentFrameRates(fps);
+
+    this.updateBulletLifespans(renderTimeDelta)
+    this.recalculatePositions(renderTimeDelta);
     this.recalculateRemainingAsteroids();
-    this.checkIfWon(this.remainingAsteroids)
-    this.reRender();
-    if (this.useAnimationFrame) window.requestAnimationFrame(this.reAnimateWithPositionAbsolute.bind(this))
+    this.checkIfWon(this.remainingAsteroids);
+    this.updatePlayerVelocity();
+    this.render();
+    window.requestAnimationFrame(this.updateState.bind(this))
   }
+
+  updatePlayerVelocity() {
+    if (!this.isAlive) return;
+    const player = this.moverRegistry[this.cMoverId]
+    // if some key is active, we should call the player's 
+    // 'update' method, passing the active key
+    Object.entries(player.keyStates).forEach(([key, isActive]) => {
+      // debugger;
+      if (isActive) {
+        player.update(key);
+      }
+    })
+  }
+
+    // Removes all moving elements from the DOM and re-adds them with their updated coordinates.
+    render() {
+      // clear the DOM
+      const allMovers = document.querySelectorAll(".mover")
+      allMovers.forEach(mover => mover.remove())
+      const mainArea = document.querySelector("#main-area")
+      // Add everything in that's still in the registry
+      Object.values(this.moverRegistry).forEach(mover => {
+        const newMoverDiv = document.createElement("div");
+        newMoverDiv.className = "mover";
+        newMoverDiv.style.position = "absolute"
+        newMoverDiv.style.left = mover.position.x;
+        newMoverDiv.style.top = mover.position.y;
+        newMoverDiv.style.width = mover.width;
+        newMoverDiv.style.height = mover.height;
+        newMoverDiv.style.background = mover.color;
+        newMoverDiv.id = mover.id;
+  
+        mainArea.appendChild(newMoverDiv);
+      })
+      document.querySelector("#score").innerHTML = `Score: ${this.score}`;
+      document.querySelector("#remaining-asteroids").innerHTML = `Remaining Asteroids: ${this.remainingAsteroids}`;
+      document.querySelector("#active-bullet-counter").innerHTML = `ActiveBullets: ${Bullet.count}`;
+      document.querySelector("#moving-avg-fps").innerHTML = `Avg Fps: ${this.movingAverage}`;
+      if (!this.isAlive) {
+        document.querySelector("#you-died").innerHTML = `Y O U${"             "}D I E D`;
+      } else if (this.hasWon) {
+        document.querySelector("#you-won").innerHTML = "Y O U     D I D  I T.    G O O D   J O B";
+      }
+    }
 
   recalculateRemainingAsteroids() {
     this.remainingAsteroids = Object.values(this.moverRegistry).filter(m => m instanceof Asteroid).length;
@@ -66,7 +132,7 @@ class GameModel {
   }
   reAnimateWithTransitions() {
     this.recalculatePositions();
-    this.reRenderUsingTranslations()
+    this.renderUsingTranslations()
     window.requestAnimationFrame(this.reAnimate)
   }
 
@@ -88,6 +154,7 @@ class GameModel {
     const opts = { initX, initY, initSpeed, initAngle, game: this };
     return opts;
   }
+
   handleShoot(moverReference) {
     const bulletOpts = this.calculateBulletValues(moverReference);
     this.spawnBullet(bulletOpts)
@@ -95,7 +162,8 @@ class GameModel {
 
   spawnControlledMover() {
     const cMover = new ControlledMover({ initX: Math.random() * this.width, initY: Math.random() * this.height, game: this});
-    this.moverRegistry[cMover.id] = cMover;
+    this.cMoverId = cMover.id;
+    this.moverRegistry[this.cMoverId] = cMover;
   }
 
   spawnAsteroids(numAsteroids) {
@@ -196,7 +264,7 @@ class GameModel {
     return { xVector: finalX, yVector: finalY }
   }
 
-  // haven't yet figured out elegant function like side collision, but it is x reflection for\
+  // haven't yet figured out elegant function like side collision, but it is x reflection for
   // top bottom collision
   // x pos, y neg => add angle relative to X to nearest axis (reflect closest axis angle cross x axis) (90 + (90 - angle))
   // x pos, y pos => (90 - (angle - 90))
@@ -252,7 +320,6 @@ class GameModel {
   }
 
   recalculatePositions(delta) {
-    // console.log(timestamp);
     Object.values(this.moverRegistry).forEach(mover => {
       const { xVector, yVector } = this.calculateVectors(mover.velocity);
       const newX = mover.position.x + xVector;
@@ -294,8 +361,9 @@ class GameModel {
   }
 
   detectAndHandleObjectCollisions() {
-    // if a bullet and an asteroid hit, remove the asteroid from the mover registry and add 1000 points to the score
-    // 'hit' is defined as within 10 px box
+    // if a bullet and an asteroid hit, remove both the asteroid and bullet from
+    // the mover registry and add 1000 points to the score. 'hit' is defined as
+    // within 10 px box
     const movers = Object.values(this.moverRegistry);
     const asteroids = movers.filter(m => m instanceof Asteroid)
     const bullets = movers.filter(m => m instanceof Bullet)
@@ -320,6 +388,7 @@ class GameModel {
   }
 
   detectAndHandleAsteroidCollisions() {
+    if (!this.isAlive) return;
     const movers = Object.values(this.moverRegistry);
     const asteroids = movers.filter(m => m instanceof Asteroid)
     const player = movers.find(m => m instanceof ControlledMover)
@@ -331,7 +400,6 @@ class GameModel {
     })
   }
 
-  // calculate border collision and
   handleWallCollisions(newX, newY, mover) {
     const { speed, angle } = mover.velocity;
     // assign the defaults since they may not change
@@ -374,35 +442,15 @@ class GameModel {
     return { wallCorrectedX, wallCorrectedY, wallCorrectedSpeed, wallCorrectedAngle };
   }
 
-
-
-  // Removes all moving elements from the DOM and re-adds them with their updated coordinates.
-  reRender() {
-    // clear the DOM
-    const allMovers = document.querySelectorAll(".mover")
-    allMovers.forEach(mover => mover.remove())
-    const mainArea = document.querySelector("#main-area")
-    // Add everything in that's still in the registry
-    Object.values(this.moverRegistry).forEach(mover => {
-      const newMoverDiv = document.createElement("div");
-      newMoverDiv.className = "mover";
-      newMoverDiv.style.position = "absolute"
-      newMoverDiv.style.left = mover.position.x;
-      newMoverDiv.style.top = mover.position.y;
-      newMoverDiv.style.width = mover.width;
-      newMoverDiv.style.height = mover.height;
-      newMoverDiv.style.background = mover.color;
-      newMoverDiv.id = mover.id;
-
-      mainArea.appendChild(newMoverDiv);
-    })
-    document.querySelector("#score").innerHTML = `Score: ${this.score}`;
-    document.querySelector("#remaining-asteroids").innerHTML = `Remaining Asteroids: ${this.remainingAsteroids}`;
-    document.querySelector("#active-bullet-counter").innerHTML = `ActiveBullets: ${Bullet.count}`;
-    if (!this.isAlive) {
-      document.querySelector("#you-died").innerHTML = `Y O U${"             "}D I E D`;
-    } else if (this.hasWon) {
-      document.querySelector("#you-won").innerHTML = "Y O U     D I D  I T.    G O O D   J O B";
+  // takes care of ensuring the array has at most 100 els
+  updateRecentFrameRates(newestFrameRate) {
+    this.recentFrameRates.push(newestFrameRate);
+    // update moving average over last 100 frames 
+    if (this.recentFrameRates.length < 100) {
+      this.movingAverage = average(this.recentFrameRates);
+    } else {
+      const frameRatesLen = this.recentFrameRates.length;
+      this.movingAverage = average(this.recentFrameRates.slice(frameRatesLen - 100, frameRatesLen));
     }
 
   }
