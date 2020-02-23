@@ -10,8 +10,7 @@ class ControlledMover extends Mover {
     this.width = 10;
     this.height = 10;
     // Instead of responding to key events as they happen, updates will take place at each tick,
-    // taking into account the state of the map.
-    // mapping from keyCode to true/false
+    // taking into account the state of the keyStates mapping.
     this.keyStates = {};
     const { DIRECTIONS, SPACE } = KEY_CODES;
     Object.values(DIRECTIONS).forEach(dir => {
@@ -19,30 +18,18 @@ class ControlledMover extends Mover {
     });
     this.keyStates[SPACE] = false;
 
-    // document.addEventListener("keypress", e => {
-    //   // console.log(`key ${e.code} (${e.keyCode}) has triggered keypress`)
-    //   const { code } = e;
-    //   this.update(code);
-    // })
-
     document.addEventListener("keydown", e => this.setKeyActive(e.code))
     document.addEventListener("keyup", e => this.setKeyInactive(e.code))
   }
   setKeyActive(code) {
-    console.log(`Setting key ${code} active`)
-    // debugger;
     this.keyStates[code] = true;
   }
 
   setKeyInactive(code) {
-    console.log(`Setting key ${code} inactive`)
-
-    // debugger;
     this.keyStates[code] = false;
   }
 
   update(keyCode) {
-    // console.log('update has been called to a keypress event')
     const { DIRECTIONS, SPACE } = KEY_CODES;
     if (Object.values(DIRECTIONS).includes(keyCode)) this.updateVelocity(keyCode)
     else if (keyCode === SPACE) this.shoot();

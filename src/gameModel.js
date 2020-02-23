@@ -23,7 +23,7 @@ function average(nums) {
 class GameModel {
   constructor(width, height) {
     this.moverRegistry = {} // maps names to references to movers along with their positional info
-    this.cMoverId = null; // id of the player's mover
+    this.playerId = null;
     this.score = 0;
     this.remainingAsteroids = STARTING_ASTEROIDS;
     this.hasWon = false;
@@ -79,7 +79,7 @@ class GameModel {
 
   updatePlayerVelocity() {
     if (!this.isAlive) return;
-    const player = this.moverRegistry[this.cMoverId]
+    const player = this.moverRegistry[this.playerId]
     // if some key is active, we should call the player's 
     // 'update' method, passing the active key
     Object.entries(player.keyStates).forEach(([key, isActive]) => {
@@ -107,6 +107,17 @@ class GameModel {
         newMoverDiv.style.height = mover.height;
         newMoverDiv.style.background = mover.color;
         newMoverDiv.id = mover.id;
+
+        if (newMoverDiv.id === this.playerId) {
+          // make it a triangle
+          newMoverDiv.style.width = 0;
+          newMoverDiv.style.height = 0; 
+          newMoverDiv.style.background = "transparent";
+          newMoverDiv.style.transform = `rotate(${mover.velocity.angle}deg)`;
+          newMoverDiv.style.borderLeft = "10px solid transparent";
+          newMoverDiv.style.borderRight = "10px solid transparent";
+          newMoverDiv.style.borderBottom = "10px solid red";
+        }
   
         mainArea.appendChild(newMoverDiv);
       })
@@ -130,6 +141,7 @@ class GameModel {
       this.hasWon = true;
     }
   }
+
   reAnimateWithTransitions() {
     this.recalculatePositions();
     this.renderUsingTranslations()
@@ -170,8 +182,8 @@ class GameModel {
 
   spawnControlledMover() {
     const cMover = new ControlledMover({ initX: Math.random() * this.width, initY: Math.random() * this.height, game: this});
-    this.cMoverId = cMover.id;
-    this.moverRegistry[this.cMoverId] = cMover;
+    this.playerId = cMover.id;
+    this.moverRegistry[this.playerId] = cMover;
   }
 
   spawnAsteroids(numAsteroids) {
