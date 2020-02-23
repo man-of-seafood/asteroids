@@ -114,9 +114,9 @@ class GameModel {
           newMoverDiv.style.height = 0; 
           newMoverDiv.style.background = "transparent";
           newMoverDiv.style.transform = `rotate(${mover.velocity.angle}deg)`;
-          newMoverDiv.style.borderLeft = "10px solid transparent";
-          newMoverDiv.style.borderRight = "10px solid transparent";
-          newMoverDiv.style.borderBottom = "10px solid red";
+          newMoverDiv.style.borderLeft = "6px solid transparent";
+          newMoverDiv.style.borderRight = "6px solid transparent";
+          newMoverDiv.style.borderBottom = "15px solid red";
         }
   
         mainArea.appendChild(newMoverDiv);
