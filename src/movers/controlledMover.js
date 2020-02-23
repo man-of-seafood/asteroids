@@ -59,6 +59,13 @@ class ControlledMover extends Mover {
     }
   }
 
+  setMinimumSpeed(newMin) {
+    this.minSpeed = newMin;
+    if (this.velocity.speed < newMin) {
+      this.velocity.speed = newMin;
+    }
+  }
+
   updateDirection(direction) {
     if (direction === DIRECTIONS.LEFT) {
       // convert this into a setter and add it to the mover base class so that controlled movers and bullets can get this

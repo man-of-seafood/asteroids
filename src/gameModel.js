@@ -160,6 +160,14 @@ class GameModel {
     this.spawnBullet(bulletOpts)
   }
 
+  updateMinimumSpeed(elapsedTime) {
+    // every 3 seconds the min speed increases
+    const min = Math.floor(elapsedTime/3000);
+    // console.log('new min speed', min);
+    // update controlled mover
+    this.getControlledMover().setMinimumSpeed(min);
+  }
+
   spawnControlledMover() {
     const cMover = new ControlledMover({ initX: Math.random() * this.width, initY: Math.random() * this.height, game: this});
     this.cMoverId = cMover.id;
@@ -319,6 +327,10 @@ class GameModel {
     return Object.values(this.moverRegistry).filter(mover => mover instanceof Bullet);
   }
 
+  getControlledMover() {
+    return Object.values(this.moverRegistry).find(mover => mover instanceof ControlledMover);
+  }
+
   recalculatePositions(delta) {
     Object.values(this.moverRegistry).forEach(mover => {
       const { xVector, yVector } = this.calculateVectors(mover.velocity);
@@ -348,7 +360,6 @@ class GameModel {
   updateBulletLifespans(delta) {
     // locate all bullets and subtract the delta from their lifespans
     this.getBullets().forEach(bullet => {
-      // debugger;
       bullet.remainingLifetime -= delta;
       if (bullet.remainingLifetime <= 0) {
         bullet.remove();
