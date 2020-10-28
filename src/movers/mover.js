@@ -6,6 +6,8 @@ class Mover {
     this.velocity = new Velocity(initSpeed, initAngle);
     this.position = new Position(initX, initY);
     this.id = "id-" + Math.random().toString().substring(2);
+    // TODO: Add a centralized queue structure for events that need access to the top-level game actor's
+    // data. These pointers within the movers themselves have the potential to create spaghetti.
     this.game = game;
     this.color = "";
     this.width = 1;
@@ -33,9 +35,8 @@ class Mover {
     this.velocity.angle = this.calculateAcceptableAngle(newAngle);
   }
 
-  updateVelocity() {
-
-  }
+  // Abstract
+  updateVelocity() {}
 
   remove() {
     this.game.removeMover(this.id);

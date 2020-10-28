@@ -1,6 +1,0 @@
-1. add in real calculations for the position change taking into account the timestamp given by requestAnimationFrame
-2. (done)fix collision detection for bullets and the walls
-  a. make the dimensions of stuff be encoded into the class, and factor that into the collision detection
-3. (done)add lifetime to bullets (using timestamp)
-4. convert to typescript
-5. (done)fix the screen clear logic 

@@ -39,10 +39,11 @@ class ControlledMover extends Mover {
     this.updateDirection(direction);
   }
   updateSpeed(direction) {
+    const VELOCITY_INCREMENT = 5;
     if (direction === DIRECTIONS.UP) {
-      this.velocity.speed+= 0.3;
+      this.velocity.speed+= VELOCITY_INCREMENT;
     } else if (direction === DIRECTIONS.DOWN && this.velocity.speed > 0) {
-      this.velocity.speed= Math.max(0, this.velocity.speed - 0.3);
+      this.velocity.speed= Math.max(0, this.velocity.speed - VELOCITY_INCREMENT);
     }
   }
 
