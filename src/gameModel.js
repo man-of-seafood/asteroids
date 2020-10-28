@@ -3,7 +3,7 @@ import Asteroid from "./movers/asteroid"
 import Bullet from "./movers/bullet"
 
 
-const STARTING_ASTEROIDS = 10;
+const STARTING_ASTEROIDS = 30;
 const AXES = {
   X: "x",
   Y: "y"
@@ -34,6 +34,7 @@ class GameModel {
     this.lastRecordedTimestamp = null;
     this.initialTimestamp;
     this.elapsedTime = 0;
+
     this.recentFrameRates = [];
     this.movingAverage = 0;
   }
@@ -83,7 +84,6 @@ class GameModel {
     // if some key is active, we should call the player's 
     // 'update' method, passing the active key
     Object.entries(player.keyStates).forEach(([key, isActive]) => {
-      // debugger;
       if (isActive) {
         player.update(key);
       }
@@ -158,10 +158,16 @@ class GameModel {
     mainAreaStyle.height = HEIGHT;
   }
 
+  /**
+   * Since the bullet originates from the entity that shot it, it's initial props
+   * are derived from the them. For now, the bullet's speed is a simple constant amount
+   * higher than the mover's original speed.
+   * @param {Mover} moverReference - A reference to the entity that shot the bullet.
+   */
   calculateBulletValues(moverReference) {
     const initX = moverReference.position.x;
     const initY = moverReference.position.y;
-    const initSpeed = moverReference.velocity.speed + 5;
+    const initSpeed = moverReference.velocity.speed + 150;
     const initAngle = moverReference.velocity.angle;
     const opts = { initX, initY, initSpeed, initAngle, game: this };
     return opts;
@@ -172,23 +178,32 @@ class GameModel {
     this.spawnBullet(bulletOpts)
   }
 
+  /**
+   * Experimental: Makes the game signficantly harder. Might be a selectable mode from a main menu type construct
+   * in the future. 
+   * @param {Number} elapsedTime 
+   */
   updateMinimumSpeed(elapsedTime) {
-    // every 3 seconds the min speed increases
-    const min = Math.floor(elapsedTime/3000);
-    // console.log('new min speed', min);
-    // update controlled mover
+    // TODO: Parameterize the speed-increase interval. (Easy, med, hard, etc.)
+    const min = Math.floor(elapsedTime / 3000);
     this.getControlledMover().setMinimumSpeed(min);
   }
 
   spawnControlledMover() {
-    const cMover = new ControlledMover({ initX: Math.random() * this.width, initY: Math.random() * this.height, game: this});
-    this.playerId = cMover.id;
-    this.moverRegistry[this.playerId] = cMover;
+    const player = new ControlledMover({ 
+      initX: Math.random() * this.width,
+      initY: Math.random() * this.height,
+      initSpeed: 100,
+      game: this
+    });
+    // Cache the playerId since we'll be looking them up often
+    this.playerId = player.id;
+    this.moverRegistry[this.playerId] = player;
   }
 
   spawnAsteroids(numAsteroids) {
     for (let i = 0; i < numAsteroids; i++) {
-      const asteroid = new Asteroid({game: this})
+      const asteroid = new Asteroid({ game: this })
       this.moverRegistry[asteroid.id] = asteroid;
     }
   }
@@ -346,8 +361,8 @@ class GameModel {
   recalculatePositions(delta) {
     Object.values(this.moverRegistry).forEach(mover => {
       const { xVector, yVector } = this.calculateVectors(mover.velocity);
-      const newX = mover.position.x + xVector;
-      const newY = mover.position.y + yVector;
+      const newX = mover.position.x + xVector * (delta / 1000);
+      const newY = mover.position.y + yVector * (delta / 1000);
       const { wallCorrectedX, 
         wallCorrectedY, 
         wallCorrectedSpeed, 
