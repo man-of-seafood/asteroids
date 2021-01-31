@@ -67,12 +67,14 @@ class GameModel {
     const fps = 1000 / renderTimeDelta;
     // add this into the array the holds recent fps calculations
     this.updateRecentFrameRates(fps);
-
-    this.updateBulletLifespans(renderTimeDelta)
+    this.updatePlayerVelocity();
     this.recalculatePositions(renderTimeDelta);
+    // now detect if there were object collisions
+    this.detectAndHandleObjectCollisions()
+    this.detectAndHandleAsteroidCollisions()
+    this.updateBulletLifespans(renderTimeDelta)
     this.recalculateRemainingAsteroids();
     this.checkIfWon(this.remainingAsteroids);
-    this.updatePlayerVelocity();
     this.render();
     window.requestAnimationFrame(this.updateState.bind(this))
   }
@@ -359,10 +361,6 @@ class GameModel {
       mover.velocity.speed = wallCorrectedSpeed;
       mover.setAngle(wallCorrectedAngle);
     })
-
-    // now detect if there were object collisions
-    this.detectAndHandleObjectCollisions()
-    this.detectAndHandleAsteroidCollisions()
   }
 
   /**
