@@ -1,10 +1,11 @@
-import Velocity from "../graphics/velocity"
-import Position from "../graphics/position"
+import Velocity from "../components/velocity"
+import Position from "../components/position"
 
 class Mover {
-  constructor({ initX, initY, initSpeed, initAngle, game } = {}) {
-    this.velocity = new Velocity(initSpeed, initAngle);
-    this.position = new Position(initX, initY);
+  constructor({ initX, initY, initHeading, linearVelocities, angularVelocity = 0, mass = 1000, game } = {}) {
+    this.velocity = new Velocity(linearVelocities, angularVelocity);
+    this.position = new Position(initX, initY, initHeading);
+    this.mass = mass; // kilos
     this.id = "id-" + Math.random().toString().substring(2);
     this.game = game;
     this.color = "";
@@ -37,6 +38,8 @@ class Mover {
 
   }
 
+  // TODO: this should definitely be a function on the top level game object
+  // Entities shouldn't be able to remove themselves
   remove() {
     this.game.removeMover(this.id);
   }

@@ -2,6 +2,10 @@ import ControlledMover from "./movers/controlledMover"
 import Asteroid from "./movers/asteroid"
 import Bullet from "./movers/bullet"
 
+import KEY_CODES from "./constants/keyCodes";
+const { DIRECTIONS, SPACE } = KEY_CODES;
+// import { MAX_VELOCITY_MAGNITUDE } from "./constants/invariants";
+const DEFAULT_ANGULAR_VEL = 180;
 
 const STARTING_ASTEROIDS = 10;
 const AXES = {
@@ -21,26 +25,32 @@ function average(nums) {
 }
 
 class GameModel {
-  constructor(width, height) {
+  constructor() {
     this.moverRegistry = {} // maps names to references to movers along with their positional info
     this.playerId = null;
     this.score = 0;
     this.remainingAsteroids = STARTING_ASTEROIDS;
     this.hasWon = false;
+    this.isAlive = true;
+
     this.width = WIDTH;
     this.height = HEIGHT;
-    this.isAlive = true;
 
     this.lastRecordedTimestamp = null;
     this.initialTimestamp;
+    // TODO: Can make this a computed getter
+
     this.elapsedTime = 0;
     this.recentFrameRates = [];
     this.movingAverage = 0;
+    this.mainLoop = this.mainLoop.bind(this);
+
+    
   }
 
-  init() { 
+  init() {
     // sets up thing to update the mover registry on an interval
-    this.spawnControlledMover();
+    const player = this.spawnControlledMover();
     this.spawnAsteroids(STARTING_ASTEROIDS);
 
     this.setMainAreaStyle();
@@ -51,11 +61,18 @@ class GameModel {
     // because the state updates will happen (semi) unpredictably, we use the timestamp
     // provided by request animation frame to determine how much time has elapsed
     // since the last update. 
-    window.requestAnimationFrame(this.updateState.bind(this))
+    window.requestAnimationFrame(this.mainLoop)
+
+    
+    setInterval(() => {
+      const {x, y} = player.velocity.linear;
+      const magnitudeOfPlayerVelocity = Math.sqrt((x ** 2) +(y ** 2));
+      console.log('player velocity magnitude', magnitudeOfPlayerVelocity);
+    }, 300);
 
   }
 
-  updateState(timestamp) {
+  mainLoop(timestamp) {
     if (!this.lastRecordedTimestamp) this.initialTimestamp = this.lastRecordedTimestamp = timestamp;
     // Default is 60 to avoid division by 0 error that would present itself in the case 
     // that this is the first frame being rendered (timestamp === lastRecordedStamp)
@@ -67,7 +84,7 @@ class GameModel {
     const fps = 1000 / renderTimeDelta;
     // add this into the array the holds recent fps calculations
     this.updateRecentFrameRates(fps);
-    this.updatePlayerVelocity();
+    this.handlePlayerInputs();
     this.recalculatePositions(renderTimeDelta);
     // now detect if there were object collisions
     this.detectAndHandleObjectCollisions()
@@ -76,20 +93,54 @@ class GameModel {
     this.recalculateRemainingAsteroids();
     this.checkIfWon(this.remainingAsteroids);
     this.render();
-    window.requestAnimationFrame(this.updateState.bind(this))
+
+    // TODO: Don't rebind this function in every loop! just bind in the constructor to create a single
+    // func that gets referenced here. 
+    window.requestAnimationFrame(this.mainLoop)
   }
 
-  updatePlayerVelocity() {
+  // Updates linear and angular velocities. 
+  // In the case neither of the side buttons are being pushed, we need to set the angular velocity to 0 to prevent infinite turning.
+  // This contrasts with the linear velocities which will be preserved even without active acceleration since we're modeling that 
+  // more faithfully to space movement (very low friction). 
+    handlePlayerInputs() {
     if (!this.isAlive) return;
-    const player = this.moverRegistry[this.playerId]
-    // if some key is active, we should call the player's 
-    // 'update' method, passing the active key
+    const player = this.moverRegistry[this.playerId];
+    let isTurning = false;
+
     Object.entries(player.keyStates).forEach(([key, isActive]) => {
-      // debugger;
       if (isActive) {
-        player.update(key);
+        if (key === DIRECTIONS.UP) {
+          // debugger;
+          // calculate acceleration with F=ma
+          const accelerationMagnitude = player.thruster.force / player.mass;
+          // update the linear velocities based on the heading, gathered from the position
+          const { xVector, yVector } = this.calculateVectors(accelerationMagnitude, player.position.heading);
+          // update velocities
+          // TODO: See if max velocity check needs to be added or if 'friction' will implicitly cap velocity
+          player.velocity.linear.x += xVector;
+          player.velocity.linear.y += yVector;
+        } else if (key === DIRECTIONS.LEFT) {
+          // update angular velocity to turn left (counter clockwise rotation implies decreasing angle)
+          player.velocity.angular = -DEFAULT_ANGULAR_VEL;
+          isTurning = true;
+        } else if (key === DIRECTIONS.RIGHT) {
+          player.velocity.angular = DEFAULT_ANGULAR_VEL;
+          isTurning = true;
+        } else if (key === SPACE) {
+          this.handleShoot(player);
+        } else if (key === DIRECTIONS.DOWN) {
+          // no op
+        } else {
+          console.warn('Key state had an active key we were not anticipating', key);
+        }
+
       }
     })
+
+    if (!isTurning) {
+      player.velocity.angular = 0;
+    }
   }
 
     // Removes all moving elements from the DOM and re-adds them with their updated coordinates.
@@ -101,7 +152,8 @@ class GameModel {
       // Add everything in that's still in the registry
       Object.values(this.moverRegistry).forEach(mover => {
         const newMoverDiv = document.createElement("div");
-        newMoverDiv.className = "mover";
+
+        newMoverDiv.className = "mover player";
         newMoverDiv.style.position = "absolute"
         newMoverDiv.style.left = mover.position.x;
         newMoverDiv.style.top = mover.position.y;
@@ -115,7 +167,7 @@ class GameModel {
           newMoverDiv.style.width = 0;
           newMoverDiv.style.height = 0; 
           newMoverDiv.style.background = "transparent";
-          newMoverDiv.style.transform = `rotate(${mover.velocity.angle}deg)`;
+          newMoverDiv.style.transform = `rotate(${mover.position.heading}deg)`;
           newMoverDiv.style.borderLeft = "6px solid transparent";
           newMoverDiv.style.borderRight = "6px solid transparent";
           newMoverDiv.style.borderBottom = "15px solid red";
@@ -144,12 +196,6 @@ class GameModel {
     }
   }
 
-  reAnimateWithTransitions() {
-    this.recalculatePositions();
-    this.renderUsingTranslations()
-    window.requestAnimationFrame(this.reAnimate)
-  }
-
   setMainAreaStyle() {
     const mainAreaStyle = document.querySelector("#main-area").style
     mainAreaStyle.position = "absolute"
@@ -160,12 +206,29 @@ class GameModel {
     mainAreaStyle.height = HEIGHT;
   }
 
+  // TODO: Come up with better way to express bullet speeds.
+  // Right now it's a function of the player's starting speed (so it doesn't collide with its own bullet)
+  // I think this still should be true but with some more fine tuning.
   calculateBulletValues(moverReference) {
     const initX = moverReference.position.x;
     const initY = moverReference.position.y;
-    const initSpeed = moverReference.velocity.speed + 5;
-    const initAngle = moverReference.velocity.angle;
-    const opts = { initX, initY, initSpeed, initAngle, game: this };
+
+    const {x, y} = moverReference.velocity.linear;
+
+    const BULLET_COEFFICIENT = 2;
+    // const MAX_PLAYER_SPEED = 
+    const magnitudeOfPlayerVelocity = Math.sqrt((x ** 2) +(y ** 2));
+    const bulletVelocityMagnitude = magnitudeOfPlayerVelocity * BULLET_COEFFICIENT;
+    const initHeading = moverReference.position.heading;
+    
+    const { xVector: newXVel, yVector: newYVel } = this.calculateVectors(bulletVelocityMagnitude, initHeading);
+    const bulletLinearVelocity = {
+      x: newXVel,
+      y: newYVel,
+    };
+    console.log('Player velocity:', moverReference.velocity.linear, 'and the computed bullet stuff:', bulletLinearVelocity)
+
+    const opts = { initX, initY, initHeading, linearVelocities: bulletLinearVelocity, game: this };
     return opts;
   }
 
@@ -183,14 +246,29 @@ class GameModel {
   }
 
   spawnControlledMover() {
-    const cMover = new ControlledMover({ initX: Math.random() * this.width, initY: Math.random() * this.height, game: this});
+    const cMover = new ControlledMover({
+      initX: Math.random() * this.width, 
+      initY: Math.random() * this.height,
+      linearVelocities: {
+        x: 2,
+        y: 2,
+      },
+      game: this
+    });
     this.playerId = cMover.id;
     this.moverRegistry[this.playerId] = cMover;
+    return cMover;
   }
 
   spawnAsteroids(numAsteroids) {
     for (let i = 0; i < numAsteroids; i++) {
-      const asteroid = new Asteroid({game: this})
+      const asteroid = new Asteroid({
+        linearVelocities: {
+          x: Math.random() * 10,
+          y: Math.random() * 10,
+        }, 
+        game: this
+      })
       this.moverRegistry[asteroid.id] = asteroid;
     }
   }
@@ -208,11 +286,11 @@ class GameModel {
   determineQuadrantFromAngle(angle) {
     if (angle >= 0 && angle <= 90) {
       return 1;
-    } else if (angle >= 91 && angle <= 180) {
+    } else if (angle > 90 && angle <= 180) {
       return 2;
-    } else if(angle >= 181 && angle <= 270) {
+    } else if(angle > 180 && angle <= 270) {
       return 3;
-    } else if (angle >= 271 && angle <= 360) {
+    } else if (angle > 270 && angle <= 360) {
       return 4;
     } else {
       throw new Error("Angle not between 0 and 360 inclusive")
@@ -264,7 +342,10 @@ class GameModel {
     };
   }
 
-  calculateVectors({angle, speed}) {
+  calculateVectors(magnitude, angle) {
+    if (angle > 360 || angle < 0) {
+      debugger;
+    }
     // const { angle, speed } = mover.velocity;
     const {axisAngle, axis: closestAxis} = this.determineClosestAxisFromAngle(angle);
 
@@ -272,8 +353,8 @@ class GameModel {
     const closestAxisOffsetAngle = Math.abs(axisAngle - angle);
     const radians = this.convertToRadians(closestAxisOffsetAngle);
     
-    let xVector = this.calculateXVector(radians, speed);
-    let yVector = this.calculateYVector(radians, speed);
+    let xVector = this.calculateXVector(radians, magnitude);
+    let yVector = this.calculateYVector(radians, magnitude);
     
     if (closestAxis === AXES.Y) {
       let tmp = xVector;
@@ -300,40 +381,40 @@ class GameModel {
   // x neg, y neg => Math.abs(360 - angle)
   // x neg, y pos => Math.abs(360 - angle)
 
-  calculateWallReflectedAngle(angle, xVector, yVector, isSideBoundary) {
-    const isPositive = num => num > 0;
+  // calculateWallReflectedAngle(angle, xVector, yVector, isSideBoundary) {
+  //   const isPositive = num => num > 0;
 
-    if (isSideBoundary) {
-      const yReflectedAngle = Math.abs(360 - angle);
-      return yReflectedAngle
-    } else {
-      if (isPositive(xVector) && !isPositive(yVector)) {
-        return 90 + (90 - angle);
-      } else if (isPositive(xVector) && isPositive(yVector)) {
-        return 90 - (angle - 90);
-      } else if (!isPositive(xVector) && !isPositive(yVector)) {
-        return 270 - (angle - 270);
-      } else if (!isPositive(xVector) && isPositive(yVector)) {
-        return 270 + (270 - angle);
-      }
-    }
-  }
+  //   if (isSideBoundary) {
+  //     const yReflectedAngle = Math.abs(360 - angle);
+  //     return yReflectedAngle
+  //   } else {
+  //     if (isPositive(xVector) && !isPositive(yVector)) {
+  //       return 90 + (90 - angle);
+  //     } else if (isPositive(xVector) && isPositive(yVector)) {
+  //       return 90 - (angle - 90);
+  //     } else if (!isPositive(xVector) && !isPositive(yVector)) {
+  //       return 270 - (angle - 270);
+  //     } else if (!isPositive(xVector) && isPositive(yVector)) {
+  //       return 270 + (270 - angle);
+  //     }
+  //   }
+  // }
 
-  calculateXVector(radians, speed) {
+  calculateXVector(radians, magnitude) {
     const coefficient = Math.cos(radians);
-    const x = coefficient * speed;
+    const x = coefficient * magnitude;
     return x;
   }
 
-  calculateYVector(radians, speed) {
+  calculateYVector(radians, magnitude) {
     const coefficient = Math.sin(radians);
-    const y = coefficient * speed;
+    const y = coefficient * magnitude;
     return -y;
   }
 
-  calculateYVectorFromRaw(angle, speed) {
+  calculateYVectorFromRaw(angle, magnitude) {
     const radians = this.convertToRadians(angle + 90);
-    const y = Math.sin(radians) * speed;
+    const y = Math.sin(radians) * magnitude;
     return -y;
   }
 
@@ -345,22 +426,35 @@ class GameModel {
     return Object.values(this.moverRegistry).find(mover => mover instanceof ControlledMover);
   }
 
-  recalculatePositions(delta) {
+  recalculatePositions(deltaT) {
     Object.values(this.moverRegistry).forEach(mover => {
-      const { xVector, yVector } = this.calculateVectors(mover.velocity);
-      const newX = mover.position.x + xVector;
-      const newY = mover.position.y + yVector;
-      const { wallCorrectedX, 
-        wallCorrectedY, 
-        wallCorrectedSpeed, 
-        wallCorrectedAngle } = this.handleWallCollisions(newX, newY, mover);
-
+      const elapsedSeconds = (deltaT / 1000)
+      const newX = mover.position.x + (mover.velocity.linear.x * elapsedSeconds);
+      const newY = mover.position.y + (mover.velocity.linear.y * elapsedSeconds);
+      const { 
+        wallCorrectedX,
+        wallCorrectedY,
+        wallCorrectedLinearVelocity
+      } = this.handleWallCollisions(newX, newY, mover);
 
       mover.position.x = wallCorrectedX;
       mover.position.y = wallCorrectedY;
-      mover.velocity.speed = wallCorrectedSpeed;
-      mover.setAngle(wallCorrectedAngle);
+      // Need to have min/max angle here
+      // TODO: make this more robust.
+      mover.position.heading = this.calculateAcceptableAngle(mover.position.heading + (mover.velocity.angular * elapsedSeconds))
+      mover.velocity.linear = wallCorrectedLinearVelocity;
     })
+  }
+
+  calculateAcceptableAngle(rawAngle) {
+    if (rawAngle <= 0) {
+      const negativeAmount = rawAngle;
+      return 360 + negativeAmount;
+    } if (rawAngle > 360) {
+      const amountAbove360 = rawAngle - 360;
+      return  amountAbove360;
+    }
+    return rawAngle;
   }
 
   /**
@@ -422,45 +516,48 @@ class GameModel {
   }
 
   handleWallCollisions(newX, newY, mover) {
-    const { speed, angle } = mover.velocity;
+    const { linear: initVelocity } = mover.velocity;
     // assign the defaults since they may not change
     let wallCorrectedX = newX;
     let wallCorrectedY = newY;
-    let wallCorrectedSpeed = speed;
-    let wallCorrectedAngle = angle;
+    let wallCorrectedLinearVelocity = initVelocity;
     // Player and asteroid will do the ole teleport
     if (mover instanceof ControlledMover || mover instanceof Asteroid) {
-      // no-op on the velocity for the player controlled unit because we want teleportation to happen smoothly
-      wallCorrectedSpeed = speed;
-      wallCorrectedAngle = angle;
+      // Don't update velocity -- just update position to achieve teleport.
       if (newX < 0) {
         wallCorrectedX = WIDTH;
-      } else if (newX > WIDTH) {
+      } else if (newX >= WIDTH) {
         wallCorrectedX = 0;
       }
       if (newY < 0) {
         wallCorrectedY = HEIGHT;
-      } else if (newY > HEIGHT) {
+      } else if (newY >= HEIGHT) {
         wallCorrectedY = 0;
       }
-    } else if (mover instanceof Bullet) {
-      // no op on the x and y since change in angle will handle things for the bullets
+    } else if (mover instanceof Bullet) { // should bounce off the edges of the world -- will become relevant when there are more walls in the terrain
+      // Don't update position -- just update velocity
       const maxAllowableX = WIDTH - mover.width;
       const maxAllowableY = HEIGHT - mover.height;
       wallCorrectedX = newX <= 0 ? 0 : Math.min(newX, maxAllowableX);
       wallCorrectedY = newY <= 0 ? 0 : Math.min(newY, maxAllowableY);
       // if the adjusted coords correspond to a wall boundary, make it bounce off
       if (wallCorrectedX === 0 || wallCorrectedX === maxAllowableX || wallCorrectedY === 0 || wallCorrectedY === maxAllowableY) {
-        const { xVector, yVector } = this.calculateVectors(mover.velocity);
-        if (Math.abs(angle) % 180 === 0) {
-          wallCorrectedAngle = angle + 180 
+        const isSideBoundary = wallCorrectedX === 0 || wallCorrectedX === maxAllowableX;
+        // if side reflection: invert x velocity. y velocity should remain untouched
+        if (isSideBoundary) {
+          wallCorrectedLinearVelocity = {
+            x: -initVelocity.x,
+            y: initVelocity.y,
+          }
         } else {
-          const isSideBoundary = wallCorrectedX === 0 || wallCorrectedX === maxAllowableX
-          wallCorrectedAngle = this.calculateWallReflectedAngle(angle, xVector, yVector, isSideBoundary);
+          wallCorrectedLinearVelocity = {
+            x: initVelocity.x,
+            y: -initVelocity.y,
+          }
         }
       }
     }
-    return { wallCorrectedX, wallCorrectedY, wallCorrectedSpeed, wallCorrectedAngle };
+    return { wallCorrectedX, wallCorrectedY, wallCorrectedLinearVelocity };
   }
 
   // takes care of ensuring the array has at most 100 els
@@ -474,15 +571,6 @@ class GameModel {
       this.movingAverage = average(this.recentFrameRates.slice(frameRatesLen - 100, frameRatesLen));
     }
 
-  }
-
-  reRenderUsingTranslations() {
-    Object.values(this.moverRegistry).forEach(mover => {
-      const moverDiv = document.querySelector(`#${mover.id}`)
-      const translationString = `translate(${mover.position.x}px, ${mover.position.y}px}`
-      console.log('translation string', translationString)
-      moverDiv.style.transform = translationString;
-    })
   }
 }
 
